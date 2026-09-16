@@ -1,0 +1,98 @@
+# NAND2 FinFET DC Characterization — nfin Sweep
+
+BSIM-CMG (ASAP7-style) NAND2 gate, DC voltage transfer characteristic (VTC) vs. fin count (`nfin`).
+
+## Setup
+
+- **Circuit**: NAND2, `VDD = 0.7V`, `B` held high, `A` swept via `.dc VA 0 0.7 1m`
+- **Output measured**: `v(y)` vs `v(a)`
+- **Sweep variants**:
+  1. Symmetric — `nfin_n = nfin_p = nfin`, swept over 1, 2, 4, 8, 14
+  2. Independent (beta-ratio) — `nfin_n` and `nfin_p` varied separately, breaking the symmetric tie
+
+## Results — Symmetric nfin Sweep
+
+The `v(y)` vs `v(a)` curve is **identical across all nfin values tested** (1, 2, 4, 8, 14) — the traces overlap exactly, with no shift in switching threshold or transition shape.
+
+## Results — Independent nfin_n / nfin_p Sweep
+
+Varying `nfin_n` relative to a fixed `nfin_p` (or vice versa) **does shift the curve**: strengthening the pull-down path (higher `nfin_n`) moves the switching threshold V_M toward lower `v(a)`, and increasing the drive imbalance sharpens the transition slope around V_M.
+
+## Inferences
+
+1. **DC VTC depends only on the beta ratio, not absolute device size.** Scaling NMOS and PMOS by the same `nfin` factor scales both β_p and β_n proportionally, so β_p/β_n — and therefore V_M and the whole VTC shape — stays fixed. Identical curves across the symmetric sweep confirm this and are expected physics, not a simulation artifact.
+2. **This also confirms model/scaling self-consistency**: both model cards and the `nfin`-based fin scaling are behaving as intended, since a genuine asymmetry or scaling bug would have broken the exact overlap.
+3. **Symmetric nfin sweeps are the wrong experiment for observing fin-count effects on DC behavior** — this is why the transient analysis (delay, power) was run separately to actually expose nfin-dependent performance.
+4. **Breaking the symmetry (independent nfin_n/nfin_p) is the correct way to move V_M** — this is the standard beta-ratio design lever used for skewed-cell design (e.g. LVT/HVT variants biased toward faster rise or fall).
+5. **Logic-level integrity holds at every nfin tested**: output swings rail-to-rail (`v(y) ≈ 0` to `≈0.7V`) with a clean monotonic transition through the midpoint — fin count does not degrade static noise margins or logic levels in this design; only speed and power (per the transient results) respond to nfin.
+
+## Relationship to Transient Results
+
+DC and transient analyses probe different aspects of nfin scaling:
+
+| Analysis                       | What it shows                | nfin dependence |
+|--------------------------------|------------------------------|-----------------|
+| DC (symmetric nfin)            | Logic threshold, output swing| None — VTC invariant |
+| DC (independent nfin_n/nfin_p) | Beta-ratio / threshold shift | Direct — V_M shifts with ratio |
+| Transient                      | Propagation delay, power     | Strong — delay ↓, power ↑ linearly with nfin |
+
+**Summary for reporting**: DC analysis confirms the gate's logic behavior and switching threshold are governed by the beta ratio, not absolute fin count, and remain invariant under symmetric scaling — while transient analysis (see companion README) confirms fin count instead governs speed and power. Together these separate what nfin does and doesn't control in this design.
+
+
+# NAND2 FinFET Transient Characterization — nfin Sweep
+
+BSIM-CMG (ASAP7-style) NAND2 gate, transient delay and power scaling vs. fin count (`nfin`).
+
+## Setup
+
+- **Circuit**: NAND2, `A` toggling via `PULSE`, `B` held high (worst-case single-NMOS pull-down path through the series stack)
+- **Load**: fixed `CL = 1fF`
+- **Sweep**: `nfin_n = nfin_p = nfin`, swept over 1, 2, 4, 8, 16 via `alterparam` + `reset`
+- **Measurements**: `tpdr` / `tpdf` (50%-to-50% propagation delay), `pavg` (average power)
+
+## Results — Propagation Delay
+
+| nfin | tpdr (ps) | tpdf (ps) |
+|-----:|----------:|----------:|
+|    1 |     8.036 |    11.640 |
+|    2 |     4.988 |     6.693 |
+|    4 |     3.320 |     4.208 |
+|    8 |     2.342 |     2.882 |
+|   16 |     1.779 |     2.135 |
+
+**Doubling ratios** (delay at 2N / delay at N):
+
+| nfin doubling | tpdr ratio | tpdf ratio |
+|---------------|------------|------------|
+| 1→2           | 0.62       | 0.58       |
+|  2→4          | 0.67       | 0.63       |
+| 4→8           | 0.71       | 0.69       |
+| 8→16          | 0.76       | 0.74       |
+
+## Results — Average Power
+
+| nfin | pavg (W) | Ratio vs. nfin=1 |
+|------|----------|------------------|
+|    1 | 9.53e-08 | 1.00×            |
+|    2 | 1.91e-07 | 2.00×            |
+|    4 | 3.81e-07 | 4.00×            |
+|    8 | 7.63e-07 | 8.00×            |
+|   10 | 9.53e-07 | 10.0×            |
+|   14 | 1.33e-06 | 14.0×            |
+
+## Inferences
+
+1. **Power scales linearly with nfin** — confirms drive current scales proportionally with fin count, as expected, and confirms the sweep mechanics (`alterparam`/`reset`) are correctly re-elaborating the circuit each iteration.
+2. **Delay scales sub-linearly with nfin** (log-log slope ≈ −0.5 to −0.6, vs. an ideal current-limited slope of −1). Each doubling of `nfin` gives progressively smaller delay improvement (ratio rising from 0.62 toward 0.76 across the sweep).
+3. **Cause**: total capacitance seen by the gate = fixed `CL` + intrinsic device parasitics (`cgso`/`cgdo`), and the parasitic term scales linearly with `nfin`. At low `nfin`, the fixed `CL` dominates and delay tracks close to `1/nfin`; at high `nfin`, self-capacitance becomes a larger share of the load, diluting the benefit of added drive current. This is the standard "diminishing returns from upsizing" effect.
+4. **tpdf > tpdr at every nfin**, a consistent offset reflecting PMOS/NMOS drive-strength asymmetry (different `u0`, `vsat`, `ksativ`, `mexp` between the N and P model cards) rather than a sweep artifact.
+
+## Known Issue — Excluded From This Summary
+
+A later run using `tphl`/`tfall` measurements (with `tran` timestep `1p`, `nfin` = 1,2,4,8,10,14) returned **identical delay values across every nfin**, alongside a repeated ngspice warning:
+```
+Warning, more than 10% of scale vector v(y) data points are not monotonic.
+```
+This indicates `v(y)` was ringing near the 0.35V threshold and `.measure` locked onto a spurious early crossing rather than the true switching edge. **Those `tphl`/`tfall` values are not physically valid and are excluded here.** The `pavg` values from that same run are unaffected (power measurement doesn't depend on threshold-crossing detection) and are included above, consistent with the linear scaling seen elsewhere.
+
+**Suggested fix before re-running delay extraction**: reduce `tran` timestep further (e.g. `0.1p`), slacken the input edge rate (rise/fall > 10p), and/or pin `.measure` to an explicit crossing number (`cross=`) rather than the default first crossing.

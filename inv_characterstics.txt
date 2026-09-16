@@ -1,0 +1,60 @@
+# Inverter Characterization Results
+
+BSIM-CMG (ASAP7-style) inverter — DC switching characteristics and transient delay.
+
+## DC Analysis
+
+### Switching Threshold (Vm)
+
+Vm is the point where `v(in) = v(out)` on the VTC (found by minimizing `|v(out) - v(in)|` across the sweep).
+
+| Parameter                       | Value      |
+|---------------------------------|------------|
+| Vm (switching voltage)          | 0.348 V    |
+| v(out) at Vm                    | 0.3473 V   |
+| Residual (v(out) − v(in)) at Vm | 7.33e-04 V |
+| Sweep index at Vm               | 348        |
+
+The small residual (~0.73 mV) confirms Vm was resolved to fine precision within the sweep's step size — not an exact zero because the DC sweep is discretely stepped, not continuous.
+
+### Small-Signal Gain and Noise Margins
+
+| Parameter                                   | Value    |
+|---------------------------------------------|----------|
+| Maximum voltage gain (dV(out)/dV(in))       | 6.457    |
+| VIL (input low threshold, gain = −1 point)  | 0.2500 V |
+| VIH (input high threshold, gain = −1 point) | 0.4337 V |
+
+## Transient Analysis
+
+### Initial Operating Point (in = 0)
+
+| Node    | Voltage  |
+|---------|----------|
+| vdd     | 0.700 V  |
+| in      | 0.000 V  |
+| inv_out | 0.6998 V |
+
+Branch currents at t=0 (`vin`, `vdd`) are near-zero (~1e-8–1e-11 A range), consistent with a settled DC operating point before the input transitions.
+
+### Propagation Delay
+
+| Parameter          | Value        | trig        | targ        |
+|--------------------|--------------|-------------|-------------|
+| tphl (high-to-low) | 7.554 ps     | 5.00e-12 s  | 1.255e-11 s |
+| tplh (low-to-high) | 7.844 ps     | 1.015e-09 s | 1.023e-09 s |
+| **tp (average)**   | **7.699 ps** | —           |     —       |
+
+`tp = (tphl + tplh) / 2`, the standard average propagation delay figure of merit for the inverter.
+
+## Summary
+
+| Metric      | Value                                                               |
+|-------------|---------------------------------------------------------------------|
+| Vm          | 0.348 V (≈ 50% of VDD, as expected for a roughly balanced inverter) |
+| Max gain    | 6.46                                                                |
+| VIL / VIH   | 0.250 V / 0.434 V                                                   |
+| tphl / tplh | 7.55 ps / 7.84 ps                                                   |
+| tp (avg)    | 7.70 ps                                                             |
+
+**Note**: Vm sitting close to but not exactly at VDD/2 (0.35V) combined with tphl slightly less than tplh both point toward a mild pull-down (NMOS) drive-strength advantage relative to pull-up (PMOS) — consistent with typical beta-ratio asymmetry unless explicitly compensated by sizing.
